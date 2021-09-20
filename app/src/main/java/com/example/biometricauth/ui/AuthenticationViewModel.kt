@@ -2,11 +2,16 @@ package com.example.biometricauth.ui
 
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.*
+import androidx.biometric.BiometricPrompt
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.biometricauth.R
+import com.example.biometricauth.common.Event
+import com.example.biometricauth.common.SimpleBiometricAuthenticationCallback
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.nio.charset.Charset
+import java.util.*
 import javax.inject.Inject
 
 @HiltViewModel
@@ -16,6 +21,12 @@ class AuthenticationViewModel @Inject constructor(
 
     private val _state = MutableLiveData<State>()
     val state: LiveData<State> = _state
+
+    private val _cryptoData = MutableLiveData<String>()
+    val cryptoData: LiveData<String> = _cryptoData
+
+    private val _statusData = MutableLiveData<Event<String>>()
+    val statusData: LiveData<Event<String>> = _statusData
 
     data class State(
             val biometricStrongStatus: AuthenticatorStatus,
@@ -54,8 +65,44 @@ class AuthenticationViewModel @Inject constructor(
         BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> AuthenticatorStatus.Failure(message = "BIOMETRIC_ERROR_NO_HARDWARE")
         BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> AuthenticatorStatus.Failure(message = "BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED")
         else -> AuthenticatorStatus.Failure(message = "UNKNOWN_ERROR")
-
     }
 
+    val basicAuthenticationCallback by lazy {
+        object : SimpleBiometricAuthenticationCallback() {
+            override fun onError(message: String) = _statusData.postValue(Event(message))
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                _statusData.postValue(Event("Success"))
+            }
+        }
+    }
 
+    fun encryptAuthenticationCallback(data: String) = object : SimpleBiometricAuthenticationCallback() {
+        override fun onError(message: String) = _statusData.postValue(Event(message))
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+            val encryptedData = result.cryptoObject?.cipher?.doFinal(
+                    data.toByteArray(Charset.defaultCharset())
+            )
+
+            encryptedData?.let {
+                _cryptoData.value = Base64.getEncoder().encodeToString(encryptedData)
+                _statusData.postValue(Event("Success"))
+            }
+        }
+    }
+
+    fun decryptAuthenticationCallback(encryptedData: String?) = object : SimpleBiometricAuthenticationCallback() {
+        override fun onError(message: String) = _statusData.postValue(Event(message))
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+            encryptedData ?: return
+
+            val data = result.cryptoObject?.cipher?.doFinal(
+                    Base64.getDecoder().decode(encryptedData)
+            )
+
+            data?.let {
+                _cryptoData.value = data.decodeToString()
+                _statusData.postValue(Event("Success"))
+            }
+        }
+    }
 }

@@ -12,14 +12,12 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import com.example.biometricauth.R
 import com.example.biometricauth.databinding.ActivityMainBinding
+import com.example.biometricauth.di.Crypto
 import com.example.biometricauth.ui.AuthenticationViewModel.AuthenticatorStatus
 import com.google.android.material.textview.MaterialTextView
 import dagger.hilt.android.AndroidEntryPoint
-import java.security.KeyStore
 import java.util.*
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class AuthenticationActivity : AppCompatActivity() {
@@ -27,51 +25,27 @@ class AuthenticationActivity : AppCompatActivity() {
     private val viewModel: AuthenticationViewModel by viewModels()
     private lateinit var binding: ActivityMainBinding
 
-    private val basicAuthenticationCallback by lazy {
-        object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                super.onAuthenticationError(errorCode, errString)
-                Toast.makeText(applicationContext, "Authentication error: $errString", Toast.LENGTH_SHORT).show()
-            }
-
-            override fun onAuthenticationSucceeded(
-                    result: BiometricPrompt.AuthenticationResult,
-            ) {
-                super.onAuthenticationSucceeded(result)
-                Toast.makeText(applicationContext, "Success", Toast.LENGTH_SHORT).show()
-            }
-
-            override fun onAuthenticationFailed() {
-                super.onAuthenticationFailed()
-                Toast.makeText(applicationContext, "Authentication failed", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun generateSecretKey(keyGenParameterSpec: KeyGenParameterSpec) {
-        val keyGenerator = KeyGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        keyGenerator.init(keyGenParameterSpec)
-        keyGenerator.generateKey()
-    }
-
-    private fun getSecretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
-        return keyStore.getKey("KEY_NAME", null) as SecretKey
-    }
-
-    private fun getCipher(): Cipher {
-        return Cipher.getInstance(KeyProperties.KEY_ALGORITHM_AES + "/"
-                + KeyProperties.BLOCK_MODE_CBC + "/"
-                + KeyProperties.ENCRYPTION_PADDING_PKCS7)
-    }
-
+    @Inject
+    lateinit var crypto: Crypto
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(LayoutInflater.from(this))
         setContentView(binding.root)
+
+        crypto.generateSecretKey(KeyGenParameterSpec.Builder(
+                keystoreAlias,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+                .setUserAuthenticationRequired(true)
+                // Invalidate the keys if the user has registered a new biometric
+                // credential, such as a new fingerprint. Can call this method only
+                // on Android 7.0 (API level 24) or higher. The variable
+                // "invalidatedByBiometricEnrollment" is true by default.
+                .setInvalidatedByBiometricEnrollment(true)
+                .build())
+
 
         setupViewModel()
         setupActions()
@@ -87,6 +61,15 @@ class AuthenticationActivity : AppCompatActivity() {
             authBiometricWeak.isEnabled = state.biometricWeakStatus is AuthenticatorStatus.Success
             authDeviceCredential.isEnabled = state.deviceCredentialStatus is AuthenticatorStatus.Success
         }
+
+        viewModel.statusData.observe(this@AuthenticationActivity) { event ->
+            Toast.makeText(applicationContext, event.getContentIfNotHandled(), Toast.LENGTH_SHORT).show()
+        }
+
+        viewModel.cryptoData.observe(this@AuthenticationActivity) { data ->
+            cryptoData.text = data
+            decryptButton.isEnabled = data != null
+        }
     }
 
     private fun setupBiometricStatus(view: MaterialTextView, status: AuthenticatorStatus) {
@@ -99,27 +82,37 @@ class AuthenticationActivity : AppCompatActivity() {
         authBiometricStrong.setOnClickListener { runBasicAuthentication(strongPromptInfo) }
         authBiometricWeak.setOnClickListener { runBasicAuthentication(weakPromptInfo)  }
         authDeviceCredential.setOnClickListener { runBasicAuthentication(credentialPromptInfo) }
+
+        encryptButton.setOnClickListener { runEncryptAuthentication(encryptPromptInfo) }
+        decryptButton.setOnClickListener { runDecryptAuthentication(decryptPromptInfo) }
     }
 
     private fun runBasicAuthentication(promptInfo: BiometricPrompt.PromptInfo) =
             BiometricPrompt(
                     this,
                     ContextCompat.getMainExecutor(this),
-                    basicAuthenticationCallback
+                    viewModel.basicAuthenticationCallback
             ).authenticate(promptInfo)
 
-    private fun runCryptoAuthentication(promptInfo: BiometricPrompt.PromptInfo) {
-        val cipher = getCipher()
-        val secretKey = getSecretKey()
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-
+    private fun runEncryptAuthentication(promptInfo: BiometricPrompt.PromptInfo) {
         BiometricPrompt(
                 this,
                 ContextCompat.getMainExecutor(this),
-                basicAuthenticationCallback
+                viewModel.encryptAuthenticationCallback("Netguru <3")
         ).authenticate(
                 promptInfo,
-                BiometricPrompt.CryptoObject(cipher)
+                BiometricPrompt.CryptoObject(crypto.cipherInEncryptMode(keystoreAlias))
+        )
+    }
+
+    private fun runDecryptAuthentication(promptInfo: BiometricPrompt.PromptInfo) {
+        BiometricPrompt(
+                this,
+                ContextCompat.getMainExecutor(this),
+                viewModel.decryptAuthenticationCallback(viewModel.cryptoData.value)
+        ).authenticate(
+                promptInfo,
+                BiometricPrompt.CryptoObject(crypto.cipherInDecryptMode(keystoreAlias))
         )
     }
 
@@ -146,4 +139,22 @@ class AuthenticationActivity : AppCompatActivity() {
         get() = basePromptInfo
                 .setAllowedAuthenticators(DEVICE_CREDENTIAL)
                 .build()
+
+    private val encryptPromptInfo
+        get() = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(getString(R.string.biometric_encrypt))
+                .setSubtitle(getString(R.string.biometric_encrypt_secret_data))
+                .setAllowedAuthenticators(BIOMETRIC_STRONG)
+                .setNegativeButtonText(getString(R.string.use_password))
+                .build()
+
+    private val decryptPromptInfo
+        get() = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(getString(R.string.biometric_decrypt))
+                .setSubtitle(getString(R.string.biometric_decrypt_secret_data))
+                .setAllowedAuthenticators(BIOMETRIC_STRONG)
+                .setNegativeButtonText(getString(R.string.use_password))
+                .build()
+
+    private val keystoreAlias = "my_secret_key"
 }

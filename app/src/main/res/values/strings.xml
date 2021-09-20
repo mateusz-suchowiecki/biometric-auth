@@ -8,4 +8,12 @@
     <string name="biometric_strong">BIOMETRIC_STRONG</string>
     <string name="biometric_weak">BIOMETRIC_WEAK</string>
     <string name="device_credential">DEVICE_CREDENTIAL</string>
+    <string name="encrypt">Encrypt</string>
+    <string name="decrypt">Decrypt</string>
+    <string name="basic_biometric_authentication">Basic biometric authentication</string>
+    <string name="encrypt_and_decrypt"><![CDATA[Encrypt & decrypt]]></string>
+    <string name="biometric_encrypt">Biometric encrypt</string>
+    <string name="biometric_encrypt_secret_data">Authenticate to encrypt secret data</string>
+    <string name="biometric_decrypt">Biometric decrypt</string>
+    <string name="biometric_decrypt_secret_data">Authorize to decrypt your secret data</string>
 </resources>

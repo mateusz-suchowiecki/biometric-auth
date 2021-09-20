@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Biometric Auth</string>
+    <string name="enter_secret_screen">Enter secret screen</string>
+    <string name="biometric_login">Biometric login</string>
+    <string name="biometric_login_to_show_secret_screen">Log in using your biometric to show secret screen</string>
+    <string name="you_are_in">You are in</string>
+    <string name="use_password">Use password</string>
+    <string name="biometric_strong">BIOMETRIC_STRONG</string>
+    <string name="biometric_weak">BIOMETRIC_WEAK</string>
+    <string name="device_credential">DEVICE_CREDENTIAL</string>
+</resources>

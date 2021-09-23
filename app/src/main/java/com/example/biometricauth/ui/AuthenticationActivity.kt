@@ -1,23 +1,19 @@
 package com.example.biometricauth.ui
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import android.view.LayoutInflater
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager.Authenticators.*
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import com.example.biometricauth.R
 import com.example.biometricauth.databinding.ActivityMainBinding
-import com.example.biometricauth.di.Crypto
 import com.example.biometricauth.ui.AuthenticationViewModel.AuthenticatorStatus
 import com.google.android.material.textview.MaterialTextView
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.*
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class AuthenticationActivity : AppCompatActivity() {
@@ -25,27 +21,10 @@ class AuthenticationActivity : AppCompatActivity() {
     private val viewModel: AuthenticationViewModel by viewModels()
     private lateinit var binding: ActivityMainBinding
 
-    @Inject
-    lateinit var crypto: Crypto
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(LayoutInflater.from(this))
         setContentView(binding.root)
-
-        crypto.generateSecretKey(KeyGenParameterSpec.Builder(
-                keystoreAlias,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
-                .setUserAuthenticationRequired(true)
-                // Invalidate the keys if the user has registered a new biometric
-                // credential, such as a new fingerprint. Can call this method only
-                // on Android 7.0 (API level 24) or higher. The variable
-                // "invalidatedByBiometricEnrollment" is true by default.
-                .setInvalidatedByBiometricEnrollment(true)
-                .build())
-
 
         setupViewModel()
         setupActions()
@@ -98,10 +77,10 @@ class AuthenticationActivity : AppCompatActivity() {
         BiometricPrompt(
                 this,
                 ContextCompat.getMainExecutor(this),
-                viewModel.encryptAuthenticationCallback("Netguru <3")
+                viewModel.encryptAuthenticationCallback("Secret data")
         ).authenticate(
                 promptInfo,
-                BiometricPrompt.CryptoObject(crypto.cipherInEncryptMode(keystoreAlias))
+                viewModel.encryptCryptoObject
         )
     }
 
@@ -112,7 +91,7 @@ class AuthenticationActivity : AppCompatActivity() {
                 viewModel.decryptAuthenticationCallback(viewModel.cryptoData.value)
         ).authenticate(
                 promptInfo,
-                BiometricPrompt.CryptoObject(crypto.cipherInDecryptMode(keystoreAlias))
+                viewModel.decryptCryptoObject
         )
     }
 
@@ -156,5 +135,4 @@ class AuthenticationActivity : AppCompatActivity() {
                 .setNegativeButtonText(getString(R.string.use_password))
                 .build()
 
-    private val keystoreAlias = "my_secret_key"
 }

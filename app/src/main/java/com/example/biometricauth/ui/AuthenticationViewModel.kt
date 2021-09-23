@@ -9,14 +9,17 @@ import androidx.lifecycle.ViewModel
 import com.example.biometricauth.R
 import com.example.biometricauth.common.Event
 import com.example.biometricauth.common.SimpleBiometricAuthenticationCallback
+import com.example.biometricauth.di.Crypto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.nio.charset.Charset
 import java.util.*
+import javax.crypto.Cipher
 import javax.inject.Inject
 
 @HiltViewModel
 class AuthenticationViewModel @Inject constructor(
         private val biometricManager: BiometricManager,
+        private val crypto: Crypto,
 ) : ViewModel() {
 
     private val _state = MutableLiveData<State>()
@@ -46,12 +49,19 @@ class AuthenticationViewModel @Inject constructor(
     }
 
     init {
+        crypto.generateSecretKey()
         _state.value = State(
                 getAuthenticatorStatus(BIOMETRIC_STRONG),
                 getAuthenticatorStatus(BIOMETRIC_WEAK),
                 getAuthenticatorStatus(DEVICE_CREDENTIAL),
         )
     }
+
+    val encryptCryptoObject: BiometricPrompt.CryptoObject
+        get() = BiometricPrompt.CryptoObject(crypto.cipherInEncryptMode())
+
+    val decryptCryptoObject: BiometricPrompt.CryptoObject
+        get() = BiometricPrompt.CryptoObject(crypto.cipherInDecryptMode())
 
     private fun getAuthenticatorStatus(authenticator: Int) =
             convertBiometricStatus(biometricManager.canAuthenticate(authenticator))

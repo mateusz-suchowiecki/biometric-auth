@@ -1,5 +1,8 @@
 require 'json'
 
+puts "Starting danger"
+
+
 total_dependencies_count = 0
 outdated_dependencies_count = 0
 
